@@ -3,7 +3,8 @@
 import html
 import sys
 from datetime import datetime
-from pyparsing import alphas, alphanums, Literal, Word, Forward, OneOrMore, ZeroOrMore, CharsNotIn, Suppress, QuotedString, Optional
+import getopt
+from pyparsing import alphas, alphanums, Literal, Word, Forward, OneOrMore, ZeroOrMore, CharsNotIn, Suppress, QuotedString, Optional, Keyword, CaselessKeyword, NotAny, Combine, White, Regex, delimitedList, commaSeparatedList
 
 
 def field_act(s, loc, tok):
@@ -11,12 +12,25 @@ def field_act(s, loc, tok):
     fieldSpec = html.escape(' '.join(tok[1::]).replace('"', '\\"'))
     return '<tr><td bgcolor="grey96" align="left" port="{0}"><font face="Times-bold">{0}</font>  <font color="#535353">{1}</font></td></tr>'.format(fieldName, fieldSpec)
 
-
 def field_list_act(s, loc, tok):
-    return "\n        ".join(tok)
-
+    return "".join([t + "\n" for i,t in enumerate(tok) if t != ""])
 
 def create_table_act(s, loc, tok):
+    fks = ""
+    fields = ""
+    if "fields" in tok:
+        for field in tok["fields"].split("\n"):
+            if field.startswith("FK:"):
+                if len(field[3:].split(":")) > 1:
+                    fks +='  "' + tok["tableName"] + '":' + field[3:] + "\n"
+                else:
+                    fks +='  "' + tok["tableName"] + '"' + field[3:] + "\n"
+            else:
+                fields += "        " + field + "\n"
+
+    tok["fields"] = fields
+    tok["fks"] = fks
+
     return '''
   "{tableName}" [
     shape=none
@@ -25,48 +39,100 @@ def create_table_act(s, loc, tok):
         <tr><td bgcolor="lightblue2"><font face="Times-bold" point-size="20">{tableName}</font></td></tr>
         {fields}
       </table>
-    >];'''.format(**tok)
-
+    >];
+    {fks}'''.format(**tok)
 
 def add_fkey_act(s, loc, tok):
     return '  "{tableName}":{keyName} -> "{fkTable}":{fkCol}'.format(**tok)
 
+def fkey_act(s, loc, tok):
+    return 'FK:{keyName} -> "{fkTable}":{fkCol}'.format(**tok)
+
+def fkey_nocols_act(s, loc, tok):
+    return 'FK: -> "{fkTable}"'.format(**tok)
+
+def fkey_list_act(s, loc, tok):
+    return "\n        ".join(tok)
 
 def other_statement_act(s, loc, tok):
     return ""
 
-
 def join_string_act(s, loc, tok):
     return "".join(tok).replace('\n', '\\n')
-
 
 def quoted_default_value_act(s, loc, tok):
     return tok[0] + " " + "".join(tok[1::])
 
+def pk_act(s, loc, tok):
+    return ""
 
-def grammar():
+def k_act(s, loc, tok):
+    return ""
+
+def no_act(s, loc, tok):
+    return ""
+
+def grammar(columns=True):
+    string = Regex('[a-zA-Z0-9=_]+')
+    ws = OneOrMore(White()).suppress()
+    lp = Regex('[(]').suppress()
+    rp = Regex('[)]').suppress()
+    c = Regex('[,]').suppress()
+    q = Regex("[`]").suppress()
+
     parenthesis = Forward()
     parenthesis <<= "(" + ZeroOrMore(CharsNotIn("()") | parenthesis) + ")"
     parenthesis.setParseAction(join_string_act)
 
-    quoted_string = "'" + OneOrMore(CharsNotIn("'")) + "'"
+    quoted_string = "'" + ZeroOrMore(CharsNotIn("'")) + "'"
     quoted_string.setParseAction(join_string_act)
 
     quoted_default_value = "DEFAULT" + quoted_string + OneOrMore(CharsNotIn(", \n\t"))
     quoted_default_value.setParseAction(quoted_default_value_act)
 
-    field_def = OneOrMore(quoted_default_value | Word(alphanums + "_\"'`:-/[].") | parenthesis)
-    field_def.setParseAction(field_act)
+    column_comment = CaselessKeyword("COMMENT") + quoted_string
 
-    tablename_def = ( Word(alphas + "`_.") | QuotedString("\"") )
+    primary_key = CaselessKeyword('PRIMARY').suppress() + CaselessKeyword("KEY").suppress() + lp +  string.setResultsName('primary_key') + rp
+    primary_key.ignore("`")
+    primary_key.setParseAction(pk_act)
 
-    field_list_def = field_def + ZeroOrMore(Suppress(",") + field_def)
+    key_def = Optional(CaselessKeyword('UNIQUE').suppress()) + CaselessKeyword('KEY').suppress() + Word(alphanums + "_") + lp + delimitedList(string.setResultsName('key'), delim=",") + rp
+    key_def.ignore("`")
+    key_def.setParseAction(k_act)
+
+    fkey_def = CaselessKeyword("CONSTRAINT") + Word(alphanums + "_") + CaselessKeyword("FOREIGN") + CaselessKeyword("KEY") + lp + Word(alphanums + "_").setResultsName("keyName") + rp + CaselessKeyword("REFERENCES") +  Word(alphanums + "._").setResultsName("fkTable") + lp + Word(alphanums + "_").setResultsName("fkCol") + rp + Optional(CaselessKeyword("DEFERRABLE")) + Optional(CaselessKeyword("ON") + (CaselessKeyword("DELETE") | CaselessKeyword("UPDATE")) + ( CaselessKeyword("CASCADE") | CaselessKeyword("RESTRICT") | CaselessKeyword("NO ACTION") | CaselessKeyword("SET NULL"))) + Optional(CaselessKeyword("ON") + (CaselessKeyword("DELETE") | CaselessKeyword("UPDATE")) + ( CaselessKeyword("CASCADE") | CaselessKeyword("RESTRICT") | CaselessKeyword("NO ACTION") | CaselessKeyword("SET NULL")))
+    fkey_def.ignore("`")
+    if columns:
+        fkey_def.setParseAction(fkey_act)
+    else:
+        fkey_def.setParseAction(fkey_nocols_act)
+
+    #fkey_list_def = ZeroOrMore(Suppress(",") + fkey_def)
+    #fkey_list_def.setParseAction(fkey_list_act)
+
+    field_def = OneOrMore(quoted_default_value | column_comment | Word(alphanums + "_\"'`:-/[].") | parenthesis)
+    if columns:
+        field_def.setParseAction(field_act)
+    else:
+        field_def.setParseAction(no_act)
+
+    field_list_def = delimitedList(\
+        (primary_key.suppress() | \
+        key_def.suppress() | \
+        fkey_def | \
+        field_def \
+        ), delim=","\
+    )
+    #if columns else field_def.suppress()
     field_list_def.setParseAction(field_list_act)
 
-    create_table_def = Literal("CREATE") + "TABLE" + tablename_def.setResultsName("tableName") + "(" + field_list_def.setResultsName("fields") + ")" + ";"
+    tablename_def = (Word(alphanums + "_.") | QuotedString("\""))
+    tablename_def.ignore("`")
+
+    create_table_def = CaselessKeyword("CREATE").suppress() + CaselessKeyword("TABLE").suppress() + tablename_def.setResultsName("tableName") + lp + field_list_def.setResultsName("fields") + rp + ZeroOrMore(Word(alphanums + "_\"'`:-/[].=")) + Word(";").suppress()
     create_table_def.setParseAction(create_table_act)
 
-    add_fkey_def = Literal("ALTER") + "TABLE" + "ONLY" + tablename_def.setResultsName("tableName") + "ADD" + "CONSTRAINT" + Word(alphanums + "_") + "FOREIGN" + "KEY" + "(" + Word(alphanums + "_").setResultsName("keyName") + ")" + "REFERENCES" + Word(alphanums + "._").setResultsName("fkTable") + "(" + Word(alphanums + "_").setResultsName("fkCol") + ")" + Optional(Literal("DEFERRABLE")) + Optional(Literal("ON") + "DELETE" + ( Literal("CASCADE") | Literal("RESTRICT") )) + ";"
+    add_fkey_def = CaselessKeyword("ALTER") + "TABLE" + "ONLY" + tablename_def.setResultsName("tableName") + "ADD" + "CONSTRAINT" + Word(alphanums + "_") + "FOREIGN" + "KEY" + "(" + Word(alphanums + "_").setResultsName("keyName") + ")" + "REFERENCES" + Word(alphanums + "._").setResultsName("fkTable") + "(" + Word(alphanums + "_").setResultsName("fkCol") + ")" + Optional(Literal("DEFERRABLE")) + Optional(Literal("ON") + "DELETE" + ( Literal("CASCADE") | Literal("RESTRICT") )) + ";"
     add_fkey_def.setParseAction(add_fkey_act)
 
     other_statement_def = OneOrMore(CharsNotIn(";")) + ";"
@@ -78,18 +144,49 @@ def grammar():
     return OneOrMore(comment_def | create_table_def | add_fkey_def | other_statement_def)
 
 
-def graphviz(filename):
+def graphviz(filename, columns=True):
     print("/*")
     print(" * Graphviz of '%s', created %s" % (filename, datetime.now()))
     print(" * Generated from https://github.com/rm-hull/sql_graphviz")
     print(" */")
     print("digraph g { graph [ rankdir = \"LR\" ];")
 
-    for i in grammar().setDebug(False).parseFile(filename):
+    for i in grammar(columns).setDebug(False).parseFile(filename):
         if i != "":
             print(i)
     print("}")
 
 if __name__ == '__main__':
-    filename = sys.stdin if len(sys.argv) == 1 else sys.argv[1]
-    graphviz(filename)
+
+    def print_usage():
+      print("""Syntax: %s [-n] <-i sql_file>
+      Arguments:
+           -h|--help : display this help
+           -n|--nocols : don't include columns
+           -i|--input : sql file with 'CREATE TABLE' statements""" % sys.argv[0])
+
+    sql_file = None
+    columns = True
+
+    # Get command-line arguments
+    try:
+        opts, args = getopt.gnu_getopt(sys.argv[1:], "hi:n", ["help", "input", "nocols"])
+    except getopt.GetoptError:
+        print_usage(usage)
+        sys.exit(2)
+
+    for o,a in opts:
+        if o in ("-h", "--help"):
+            print_usage(usage)
+            sys.exit()
+        elif o in ("-i", "--input"):
+            sql_file = a
+        elif o in ("-n", "--nocols"):
+            columns = False
+
+    # Sanity check
+    if sql_file is None:
+        print_usage()
+        sys.exit()
+
+    graphviz(sql_file, columns)

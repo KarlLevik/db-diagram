@@ -5,7 +5,11 @@ import sys
 from datetime import datetime
 import getopt
 from pyparsing import alphas, alphanums, Literal, Word, Forward, OneOrMore, ZeroOrMore, CharsNotIn, Suppress, QuotedString, Optional, Keyword, CaselessKeyword, NotAny, Combine, White, Regex, delimitedList, commaSeparatedList
+import pydot
 
+table_colours = ["#800000", "#9A6324", "#808000", "#469990", "#000075", "#000000", "#e6194B", "#f58231", "#ffe119", "#bfef45", "#3cb44b", "#42d4f4", "#4363d8", "#911eb4", "#f032e6", "#a9a9a9", "#fabebe", "#ffd8b1", "#fffac8", "#aaffc3", "#e6beff", "#ffffff"]
+
+text_colours = ["#ffffff", "#ffffff", "#ffffff", "#ffffff", "#ffffff", "#ffffff", "#ffffff", "#ffffff", "#000000", "#000000", "#ffffff", "#000000", "#ffffff", "#ffffff", "#ffffff", "#ffffff", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000"]
 
 def field_act(s, loc, tok):
     fieldName = tok[0].replace('"', '')
@@ -144,49 +148,58 @@ def grammar(columns=True):
     return OneOrMore(comment_def | create_table_def | add_fkey_def | other_statement_def)
 
 
-def graphviz(filename, columns=True):
-    print("/*")
-    print(" * Graphviz of '%s', created %s" % (filename, datetime.now()))
-    print(" * Generated from https://github.com/rm-hull/sql_graphviz")
-    print(" */")
-    print("digraph g { graph [ rankdir = \"LR\" ];")
+def graphviz(filename, out_file, columns=True):
+    dot_string = """
+    /*
+     * Graphviz of '%s', created %s
+     * Generated from https://github.com/rm-hull/sql_graphviz
+     */
+    digraph g { graph [ rankdir = \"LR\" ];""" % (filename, datetime.now())
 
-    for i in grammar(columns).setDebug(False).parseFile(filename):
+    results = grammar(columns).setDebug(False).parseFile(filename)
+    for i in results:
         if i != "":
-            print(i)
-    print("}")
+            dot_string += i
+    dot_string += "}"
+
+    graphs = pydot.graph_from_dot_data( dot_string )
+    graphs[0].write_svg(out_file)
 
 if __name__ == '__main__':
 
     def print_usage():
-      print("""Syntax: %s [-n] <-i sql_file>
+      print("""Syntax: %s [-n] <-i sql_file> <-o out_file>
       Arguments:
            -h|--help : display this help
            -n|--nocols : don't include columns
-           -i|--input : sql file with 'CREATE TABLE' statements""" % sys.argv[0])
+           -i|--input : sql file with 'CREATE TABLE' statements
+           -o|--output : output file (only .svg support so far)""" % sys.argv[0])
 
     sql_file = None
+    out_file = None
     columns = True
 
     # Get command-line arguments
     try:
-        opts, args = getopt.gnu_getopt(sys.argv[1:], "hi:n", ["help", "input", "nocols"])
+        opts, args = getopt.gnu_getopt(sys.argv[1:], "hi:o:n", ["help", "input", "output", "nocols"])
     except getopt.GetoptError:
-        print_usage(usage)
+        print_usage()
         sys.exit(2)
 
     for o,a in opts:
         if o in ("-h", "--help"):
-            print_usage(usage)
+            print_usage()
             sys.exit()
         elif o in ("-i", "--input"):
             sql_file = a
+        elif o in ("-o", "--output"):
+            out_file = a
         elif o in ("-n", "--nocols"):
             columns = False
 
     # Sanity check
-    if sql_file is None:
+    if sql_file is None or out_file is None:
         print_usage()
         sys.exit()
 
-    graphviz(sql_file, columns)
+    graphviz(sql_file, out_file, columns)

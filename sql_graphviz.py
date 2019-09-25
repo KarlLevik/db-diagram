@@ -2,6 +2,7 @@
 
 import html
 import sys
+import os
 from datetime import datetime
 import getopt
 from pyparsing import alphas, alphanums, Literal, Word, Forward, OneOrMore, ZeroOrMore, CharsNotIn, Suppress, QuotedString, Optional, Keyword, CaselessKeyword, NotAny, Combine, White, Regex, delimitedList, commaSeparatedList
@@ -163,7 +164,13 @@ def graphviz(filename, out_file, columns=True):
     dot_string += "}"
 
     graphs = pydot.graph_from_dot_data( dot_string )
-    graphs[0].write_svg(out_file)
+    (preext, ext) = os.path.splitext(out_file)
+    if ext == ".svg":
+        graphs[0].write_svg(out_file)
+    elif ext == ".png":
+        graphs[0].write_png(out_file)
+    else:
+        sys.stderr.write("Unsupported output file extension: %s\n" % ext)
 
 if __name__ == '__main__':
 
@@ -173,7 +180,7 @@ if __name__ == '__main__':
            -h|--help : display this help
            -n|--nocols : don't include columns
            -i|--input : sql file with 'CREATE TABLE' statements
-           -o|--output : output file (only .svg support so far)""" % sys.argv[0])
+           -o|--output : output file (only .svg + .png support so far)""" % sys.argv[0])
 
     sql_file = None
     out_file = None

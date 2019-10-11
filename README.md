@@ -30,7 +30,7 @@ conda install pyparsing
 Using MariaDB, for example, to generate an SVG file:
 
 ```bash
-mysqldump ${OPTIONS} --no-data dbname > tables.sql
+mysqldump --no-data dbname > tables.sql
 python db_diagram.py -i tables.sql -o /tmp/dbname.svg -n
 ```
 

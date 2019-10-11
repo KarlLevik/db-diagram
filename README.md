@@ -36,7 +36,7 @@ python db_diagram.py -i tables.sql -o /tmp/dbname.svg -n
 
 ### Example
 
-![SVG](https://rawgithub.com/Karl_levik/db_diagram/master/example.svg)
+![PNG](https://github.com/KarlLevik/db_diagram/blob/master/example.png?raw=true)
 
 ## Credits
 

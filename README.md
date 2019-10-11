@@ -1,39 +1,49 @@
-# SQL Graphviz
+# DB Diagram
 
-SQL Graphviz is a small python script that generates a [Graphviz](http://www.graphviz.org/)
-visualization of a SQL schema dump.
+DB Diagram is a small Python script that can help automate generation of simplified SQL database diagrams with enough detail to provide at least a high-level overview of the database schema.
+
+.svg output files are searchable and provide extra info when mouse hovering. Other output formats are also supported.
 
 ### Dependencies
 
-SQL Graphviz relies on [pyparsing](https://pypi.python.org/pypi/pyparsing/2.0.3) to grok
-the schema dump. Ubuntu users should install using:
+* [Graphviz](http://www.graphviz.org/)
+* [pyparsing](https://pypi.python.org/pypi/pyparsing/2.0.3)
 
-    $ sudo apt-get install python-pyparsing
-    
-while CheeseShop frequenters should install with pip:
+Grapviz can be installed with your package manager, e.g.
 
-    $ sudo pip install pyparsing
+```bash
+dnf install graphviz
+```
+pyparsing can be installed e.g. with pip:
+
+```bash
+pip install --user pyparsing
+```
+or with conda:
+
+```bash
+conda install pyparsing
+```
 
 ### Usage
 
-Using PostgreSQL, for example, to generate as a PNG file:
+Using MariaDB, for example, to generate an SVG file:
 
-    $ pg_dump --schema-only dbname | python sql_graphviz.py | dot -Tpng > graph.png
-
-The program will accept a named file, or if omitted as above, will take from stdin.
-Output to SVG:
-
-    $ pg_dump --schema-only dbname > dump.sql
-    $ python sql_graphviz.py dump.sql > graph.dot
-    $ dot -Tsvg graph.dot > graph.svg
+```bash
+mysqldump ${OPTIONS} --no-data dbname > tables.sql
+python db_diagram.py -i tables.sql -o /tmp/dbname.svg -n
+```
 
 ### Example
 
-![SVG](https://rawgithub.com/rm-hull/sql_graphviz/master/example.svg)
+![SVG](https://rawgithub.com/Karl_levik/db_diagram/master/example.svg)
 
 ## Credits
 
-Extended from http://energyblog.blogspot.co.uk/2006/04/blog-post_20.html by [EnErGy [CSDX]](https://www.blogger.com/profile/09096585177254790874)
+Forked from https://github.com/rm-hull/sql_graphviz
+
+... which was extended from http://energyblog.blogspot.co.uk/2006/04/blog-post_20.html by [EnErGy [CSDX]](https://www.blogger.com/profile/09096585177254790874)
+
 
 ## References
 
